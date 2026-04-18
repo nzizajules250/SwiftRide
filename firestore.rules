@@ -1,0 +1,120 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // User Profile Rules
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == request.auth.uid
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+          && data.role in ['passenger', 'rider']
+          && (data.get('rating', null) == null || data.rating is number)
+          && (data.get('totalTrips', null) == null || data.totalTrips is number)
+          && (data.get('phoneNumber', null) == null || data.phoneNumber is string)
+          && (data.get('gender', null) == null || data.gender is string)
+          && (data.get('dob', null) == null || data.dob is string)
+          && (data.get('vehicleType', null) == null || data.vehicleType in ['car', 'motorcycle'])
+          && (data.get('licenseClass', null) == null || data.licenseClass is string)
+          && (data.get('vehicleModel', null) == null || data.vehicleModel is string)
+          && (data.get('numberPlate', null) == null || data.numberPlate is string)
+          && (data.get('avatarUrl', null) == null || data.avatarUrl is string)
+          && (data.get('isOnline', null) == null || data.isOnline is bool)
+          && (data.get('badges', null) == null || data.badges is list)
+          && (data.get('favoriteUserIds', null) == null || data.favoriteUserIds is list)
+          && (data.get('emergencyContact', null) == null || (
+              data.emergencyContact.name is string && data.emergencyContact.name.size() > 0 
+              && data.emergencyContact.phone is string && data.emergencyContact.phone.size() > 0
+          ));
+      }
+
+      allow get: if isSignedIn();
+      allow list: if false; // Users shouldn't be searchable in bulk
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatarUrl', 'rating', 'totalTrips', 'isOnline', 'currentLocation', 'badges', 'phoneNumber', 'gender', 'dob', 'vehicleType', 'licenseClass', 'vehicleModel', 'numberPlate', 'favoriteUserIds', 'emergencyContact']);
+    }
+
+    // Ride Rules
+    match /rides/{rideId} {
+      function isValidRide(data) {
+        return data.passengerId == request.auth.uid
+          && data.status in ['requested', 'accepted', 'ongoing', 'completed', 'cancelled']
+          && data.fare is number && data.fare >= 0
+          && data.pickup.address is string && data.pickup.address.size() <= 200
+          && data.destination.address is string && data.destination.address.size() <= 200
+          && data.createdAt == request.time;
+      }
+
+      // Read permissions
+      allow get: if isSignedIn() && (
+        isOwner(existing().passengerId) || 
+        isOwner(existing().riderId) || 
+        existing().status == 'requested'
+      );
+      
+      allow list: if isSignedIn() && (
+        (request.query.limit <= 50) && (
+          // Passengers see their own rides
+          (resource.data.passengerId == request.auth.uid) ||
+          // Riders see their own rides OR requested rides
+          (getRole() == 'rider' && (resource.data.riderId == request.auth.uid || resource.data.status == 'requested'))
+        )
+      );
+
+      allow create: if isSignedIn() && isOwner(incoming().passengerId) && isValidRide(incoming());
+
+      allow update: if isSignedIn() && (
+        // Action: Cancel (Passenger)
+        (isOwner(existing().passengerId) && existing().status == 'requested' && incoming().status == 'cancelled' && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'cancellationReason'])
+        )) ||
+        
+        // Action: Accept (Rider)
+        (getRole() == 'rider' && existing().status == 'requested' && incoming().status == 'accepted' && incoming().riderId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'riderId', 'updatedAt'])) ||
+        
+        // Action: Start/Complete (Rider)
+        (isOwner(existing().riderId) && (
+          (existing().status == 'accepted' && incoming().status == 'ongoing') ||
+          (existing().status == 'ongoing' && incoming().status == 'completed')
+        ) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        
+        // Action: Rate Ride (Passenger)
+        (isOwner(existing().passengerId) && existing().status == 'completed' && incoming().riderRating >= 1 && incoming().riderRating <= 5 && incoming().ratingReason in ['driving', 'timing', 'navigation'] && incoming().diff(existing()).affectedKeys().hasOnly(['riderRating', 'ratingReason', 'updatedAt']))
+      );
+      
+      allow delete: if false; // Prefer soft-cancel over hard delete
+    }
+
+    // Promo Code Rules
+    match /promoCodes/{codeId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only admins can create promos (manual for now)
+    }
+  }
+}

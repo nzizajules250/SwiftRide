@@ -1,0 +1,105 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile for passenger or rider",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "role": { "type": "string", "enum": ["passenger", "rider"] },
+        "rating": { "type": "number" },
+        "totalTrips": { "type": "number" },
+        "avatarUrl": { "type": "string" },
+        "isOnline": { "type": "boolean" },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "currentLocation": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "gender": { "type": "string" },
+        "dob": { "type": "string" },
+        "vehicleType": { "type": "string", "enum": ["car", "motorcycle"] },
+        "licenseClass": { "type": "string" },
+        "vehicleModel": { "type": "string" },
+        "numberPlate": { "type": "string" },
+        "favoriteUserIds": { "type": "array", "items": { "type": "string" } },
+        "emergencyContact": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "phone": { "type": "string" }
+          }
+        }
+      },
+      "required": ["uid", "name", "role"]
+    },
+    "Ride": {
+      "title": "Ride",
+      "description": "A ride request and its status",
+      "type": "object",
+      "properties": {
+        "passengerId": { "type": "string" },
+        "riderId": { "type": "string" },
+        "pickup": {
+          "type": "object",
+          "properties": {
+            "address": { "type": "string" },
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "destination": {
+          "type": "object",
+          "properties": {
+            "address": { "type": "string" },
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "status": { "type": "string", "enum": ["requested", "accepted", "ongoing", "completed", "cancelled"] },
+        "fare": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "promoCode": { "type": "string" },
+        "cancellationReason": { "type": "string" },
+        "riderRating": { "type": "number" },
+        "ratingReason": { "type": "string", "enum": ["driving", "timing", "navigation"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["passengerId", "pickup", "destination", "status", "fare"]
+    },
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "Discount codes for rides",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "value": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["code", "discountType", "value", "isActive"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/rides/{rideId}": {
+      "schema": "Ride",
+      "description": "Ride requests and active rides"
+    },
+    "/promoCodes/{codeId}": {
+      "schema": "PromoCode",
+      "description": "Promotional codes"
+    }
+  }
+}
