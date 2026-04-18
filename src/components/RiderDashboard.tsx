@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { UserProfile, subscribeToAvailableRides, subscribeToUserRides, Ride, updateRideStatus, updateUserLocation, updateDoc, doc, db, getUserProfile, RideStatus } from '../lib/firebase';
-import { MapPin, Navigation, DollarSign, CheckCircle2, Navigation2, Loader2, ArrowRight, User, Award, ShieldCheck, Star, Car, Heart } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, CheckCircle2, Navigation2, Loader2, ArrowRight, User, Award, ShieldCheck, Star, Car, Heart, Timer, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from './NotificationCenter';
-import { arrayUnion, arrayRemove } from 'firebase/firestore';
+import { arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
   user: FirebaseUser;
@@ -47,7 +47,19 @@ export default function RiderDashboard({ user, profile }: Props) {
   useEffect(() => {
     // Subscribe to rides requested by others
     const subAvailable = subscribeToAvailableRides((rides) => {
-      const filtered = rides.filter(r => r.passengerId !== user.uid);
+      let filtered = rides.filter(r => r.passengerId !== user.uid);
+      
+      // Filter by radius if set and rider has a location
+      if (profile.availabilityRadius && profile.currentLocation) {
+        filtered = filtered.filter(ride => {
+          const latDiff = Math.abs(ride.pickup.lat - profile.currentLocation!.lat);
+          const lngDiff = Math.abs(ride.pickup.lng - profile.currentLocation!.lng);
+          const distance = Math.sqrt(Math.pow(latDiff, 2) + Math.pow(lngDiff, 2));
+          // roughly distance * 111 for km. So distance * 111 <= radius.
+          return (distance * 111) <= profile.availabilityRadius!;
+        });
+      }
+
       if (filtered.length > prevRidesCount.current) {
         addNotification('New Ride Request!', 'A new passenger is looking for a ride nearby.', 'ride_request');
       }
@@ -73,7 +85,7 @@ export default function RiderDashboard({ user, profile }: Props) {
       subAvailable();
       subMyRides();
     };
-  }, [user.uid, addNotification]);
+  }, [user.uid, addNotification, profile.availabilityRadius, profile.currentLocation]);
 
   // Real-time location tracking using Geolocation API
   useEffect(() => {
@@ -123,7 +135,12 @@ export default function RiderDashboard({ user, profile }: Props) {
 
   const handleAccept = async (rideId: string) => {
     try {
-      await updateRideStatus(rideId, 'accepted', user.uid);
+      await updateDoc(doc(db, 'rides', rideId), {
+        status: 'accepted',
+        riderId: user.uid,
+        acceptedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
     } catch (error) {
       console.error("Failed to accept", error);
     }
@@ -131,24 +148,25 @@ export default function RiderDashboard({ user, profile }: Props) {
 
   const handleNextStep = async () => {
     if (!activeRide) return;
-    let nextStatus: RideStatus;
     
-    switch (activeRide.status) {
-      case 'accepted':
-        nextStatus = 'arrived';
-        break;
-      case 'arrived':
-        nextStatus = 'ongoing';
-        break;
-      case 'ongoing':
-        nextStatus = 'completed';
-        break;
-      default:
-        return;
-    }
-
     try {
-      await updateRideStatus(activeRide.id, nextStatus);
+      if (activeRide.status === 'accepted') {
+        await updateDoc(doc(db, 'rides', activeRide.id), {
+          status: 'arrived',
+          arrivedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } else if (activeRide.status === 'arrived') {
+        await updateDoc(doc(db, 'rides', activeRide.id), {
+          riderConfirmedStart: true,
+          updatedAt: serverTimestamp()
+        });
+      } else if (activeRide.status === 'ongoing') {
+        await updateDoc(doc(db, 'rides', activeRide.id), {
+          riderConfirmedEnd: true,
+          updatedAt: serverTimestamp()
+        });
+      }
     } catch (error) {
       console.error("Failed to update status", error);
     }
@@ -219,11 +237,26 @@ export default function RiderDashboard({ user, profile }: Props) {
 
             <button 
               onClick={handleNextStep}
-              className="w-full bg-white text-black py-5 px-6 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.98]"
+              disabled={
+                (activeRide.status === 'arrived' && activeRide.riderConfirmedStart) ||
+                (activeRide.status === 'ongoing' && activeRide.riderConfirmedEnd)
+              }
+              className="w-full bg-white text-black py-5 px-6 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {activeRide.status === 'accepted' ? 'I have Arrived' : activeRide.status === 'arrived' ? 'Start Trip' : 'Complete Ride'}
+              {activeRide.status === 'accepted' ? 'I have Arrived' : 
+               activeRide.status === 'arrived' ? (activeRide.riderConfirmedStart ? 'Waiting for Passenger...' : 'Start Trip') : 
+               (activeRide.riderConfirmedEnd ? 'Waiting for Passenger...' : 'Complete Ride')}
               <ArrowRight className="w-6 h-6" />
             </button>
+
+            {activeRide.status === 'accepted' && (
+              <div className="flex justify-center">
+                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest flex items-center gap-2">
+                  <Timer className="w-3 h-3" />
+                  Time is counting. Be on time!
+                </p>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
@@ -258,14 +291,52 @@ export default function RiderDashboard({ user, profile }: Props) {
             )}
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-1">
           <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Status</p>
-          <p className="font-semibold text-lg flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            Online
-          </p>
+          <button 
+            onClick={() => updateDoc(doc(db, 'users', user.uid), { isOnline: !profile.isOnline }).catch(console.error)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-100"
+          >
+            <div className={`w-2 h-2 rounded-full ${profile.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
+            <span className="font-bold text-xs uppercase tracking-wider">{profile.isOnline ? 'Available' : 'Unavailable'}</span>
+          </button>
         </div>
       </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Target className="w-5 h-5 text-emerald-500" />
+            <h3 className="font-bold text-lg tracking-tight">Availability Radius</h3>
+          </div>
+          <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+            {profile.availabilityRadius || 10} km
+          </span>
+        </div>
+        <div className="space-y-4">
+          <input 
+            type="range" 
+            min="1" 
+            max="50" 
+            step="1"
+            value={profile.availabilityRadius || 10}
+            onChange={(e) => updateDoc(doc(db, 'users', user.uid), { availabilityRadius: parseInt(e.target.value) })}
+            className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-emerald-500 hover:accent-emerald-600 transition-all"
+          />
+          <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
+            <span>1 KM</span>
+            <span>25 KM</span>
+            <span>50 KM</span>
+          </div>
+          <p className="text-xs text-gray-400 font-medium leading-relaxed">
+            You will only receive notifications for ride requests within this distance from your current location.
+          </p>
+        </div>
+      </motion.div>
 
       <div>
         <h2 className="text-4xl font-bold tracking-tight mb-2">Available Jobs</h2>

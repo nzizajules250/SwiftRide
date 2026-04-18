@@ -342,7 +342,12 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           disabled={loading}
           className="w-full bg-white border-2 border-gray-100 text-gray-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:border-black hover:text-black transition-all"
         >
-          <img src="https://www.gstatic.com/firebase/anonymous-scan.png" className="w-6 h-6 grayscale" alt="" />
+          <img 
+            src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+            className="w-5 h-5" 
+            alt="Google" 
+            referrerPolicy="no-referrer"
+          />
           Google
         </button>
 

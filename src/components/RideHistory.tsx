@@ -114,6 +114,14 @@ export default function RideHistory({ user, profile }: Props) {
                   <Navigation className="w-4 h-4 text-gray-300 group-hover:text-black dark:group-hover:text-white transition-colors" />
                   <p className="text-xs text-gray-500 dark:text-gray-400 truncate group-hover:text-gray-900 dark:group-hover:text-gray-200 transition-colors">{ride.destination.address}</p>
                 </div>
+                {ride.status === 'completed' && ride.completedAt?.toDate && ride.startedAt?.toDate && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <Clock className="w-4 h-4 text-emerald-500/50" />
+                    <p className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-widest">
+                      Trip Duration: {Math.round((ride.completedAt.toDate().getTime() - ride.startedAt.toDate().getTime()) / 60000)} mins
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between pt-4 border-t border-gray-50 dark:border-zinc-800">

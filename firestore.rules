@@ -33,6 +33,7 @@ service cloud.firestore {
         return data.uid == request.auth.uid
           && data.name is string && data.name.size() > 0 && data.name.size() <= 100
           && data.role in ['passenger', 'rider']
+          && (data.get('email', null) == null || data.email is string)
           && (data.get('rating', null) == null || data.rating is number)
           && (data.get('totalTrips', null) == null || data.totalTrips is number)
           && (data.get('phoneNumber', null) == null || data.phoneNumber is string)
@@ -42,10 +43,13 @@ service cloud.firestore {
           && (data.get('licenseClass', null) == null || data.licenseClass is string)
           && (data.get('vehicleModel', null) == null || data.vehicleModel is string)
           && (data.get('numberPlate', null) == null || data.numberPlate is string)
+          && (data.get('availabilityRadius', null) == null || data.availabilityRadius is number)
           && (data.get('avatarUrl', null) == null || data.avatarUrl is string)
+          && (data.get('updatedAt', null) == null || data.updatedAt == request.time)
           && (data.get('isOnline', null) == null || data.isOnline is bool)
           && (data.get('badges', null) == null || data.badges is list)
           && (data.get('favoriteUserIds', null) == null || data.favoriteUserIds is list)
+          && (data.get('currentLocation', null) == null || (data.currentLocation.lat is number && data.currentLocation.lng is number))
           && (data.get('emergencyContact', null) == null || (
               data.emergencyContact.name is string && data.emergencyContact.name.size() > 0 
               && data.emergencyContact.phone is string && data.emergencyContact.phone.size() > 0
@@ -56,7 +60,12 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.role == 'rider' && resource.data.isOnline == true;
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidUser(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatarUrl', 'rating', 'totalTrips', 'isOnline', 'currentLocation', 'badges', 'phoneNumber', 'gender', 'dob', 'vehicleType', 'licenseClass', 'vehicleModel', 'numberPlate', 'favoriteUserIds', 'emergencyContact']);
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'avatarUrl', 'rating', 'totalTrips', 'isOnline', 'currentLocation', 'badges', 
+          'phoneNumber', 'gender', 'dob', 'vehicleType', 'licenseClass', 'vehicleModel', 
+          'numberPlate', 'favoriteUserIds', 'emergencyContact', 'uid', 'email', 'availabilityRadius',
+          'updatedAt'
+        ]);
     }
 
     // Ride Rules
@@ -67,6 +76,18 @@ service cloud.firestore {
           && data.fare is number && data.fare >= 0
           && data.pickup.address is string && data.pickup.address.size() <= 200
           && data.destination.address is string && data.destination.address.size() <= 200
+          && (data.get('riderId', null) == null || data.riderId is string)
+          && (data.get('acceptedAt', null) == null || data.acceptedAt == request.time)
+          && (data.get('arrivedAt', null) == null || data.arrivedAt == request.time)
+          && (data.get('startedAt', null) == null || data.startedAt == request.time)
+          && (data.get('completedAt', null) == null || data.completedAt == request.time)
+          && (data.get('passengerConfirmedArrival', null) == null || data.passengerConfirmedArrival is bool)
+          && (data.get('passengerConfirmedStart', null) == null || data.passengerConfirmedStart is bool)
+          && (data.get('passengerConfirmedEnd', null) == null || data.passengerConfirmedEnd is bool)
+          && (data.get('riderConfirmedStart', null) == null || data.riderConfirmedStart is bool)
+          && (data.get('riderConfirmedEnd', null) == null || data.riderConfirmedEnd is bool)
+          && (data.get('isOnTime', null) == null || data.isOnTime is bool)
+          && (data.get('updatedAt', null) == null || data.updatedAt == request.time)
           && data.createdAt == request.time;
       }
 
@@ -96,20 +117,46 @@ service cloud.firestore {
         )) ||
         
         // Action: Accept (Rider)
-        (getRole() == 'rider' && existing().status == 'requested' && incoming().status == 'accepted' && incoming().riderId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'riderId', 'updatedAt'])) ||
+        (getRole() == 'rider' && existing().status == 'requested' && incoming().status == 'accepted' && incoming().riderId == request.auth.uid && (
+           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'riderId', 'updatedAt', 'acceptedAt']) ||
+           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'riderId', 'updatedAt'])
+        )) ||
         
-        // Action: Start/Complete (Rider)
-        (isOwner(existing().riderId) && (
-          (existing().status == 'accepted' && incoming().status == 'arrived') ||
-          (existing().status == 'arrived' && incoming().status == 'ongoing') ||
-          (existing().status == 'ongoing' && incoming().status == 'completed')
-        ) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        // Action: Mark Arrived (Rider)
+        (isOwner(existing().riderId) && existing().status == 'accepted' && incoming().status == 'arrived' && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'arrivedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        )) ||
+
+        // Action: Passenger Confirm Arrival
+        (isOwner(existing().passengerId) && existing().status == 'arrived' && incoming().passengerConfirmedArrival == true && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['passengerConfirmedArrival', 'updatedAt', 'isOnTime']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['passengerConfirmedArrival', 'updatedAt'])
+        )) ||
+
+        // Action: Rider Signal Start
+        (isOwner(existing().riderId) && existing().status == 'arrived' && incoming().riderConfirmedStart == true && incoming().diff(existing()).affectedKeys().hasOnly(['riderConfirmedStart', 'updatedAt'])) ||
+
+        // Action: Passenger Start Trip
+        (isOwner(existing().passengerId) && existing().status == 'arrived' && existing().riderConfirmedStart == true && incoming().status == 'ongoing' && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'passengerConfirmedStart', 'startedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'passengerConfirmedStart'])
+        )) ||
+
+        // Action: Rider Signal End
+        (isOwner(existing().riderId) && existing().status == 'ongoing' && incoming().riderConfirmedEnd == true && incoming().diff(existing()).affectedKeys().hasOnly(['riderConfirmedEnd', 'updatedAt'])) ||
+
+        // Action: Passenger End Trip
+        (isOwner(existing().passengerId) && existing().status == 'ongoing' && existing().riderConfirmedEnd == true && incoming().status == 'completed' && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'passengerConfirmedEnd', 'completedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'passengerConfirmedEnd'])
+        )) ||
         
         // Action: Rate Ride (Passenger)
-        (isOwner(existing().passengerId) && existing().status == 'completed' && incoming().riderRating >= 1 && incoming().riderRating <= 5 && incoming().ratingReason in ['driving', 'timing', 'navigation'] && incoming().diff(existing()).affectedKeys().hasOnly(['riderRating', 'ratingReason', 'updatedAt']))
+        (isOwner(existing().passengerId) && (existing().status == 'completed' || incoming().status == 'completed') && incoming().riderRating >= 1 && incoming().riderRating <= 5 && incoming().ratingReason in ['driving', 'timing', 'navigation'] && incoming().diff(existing()).affectedKeys().hasOnly(['riderRating', 'ratingReason', 'updatedAt']))
       );
       
-      allow delete: if false; // Prefer soft-cancel over hard delete
+      allow delete: if false; 
     }
 
     // Promo Code Rules

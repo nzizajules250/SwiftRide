@@ -66,6 +66,7 @@ export interface UserProfile {
   licenseClass?: string;
   vehicleModel?: string;
   numberPlate?: string;
+  availabilityRadius?: number;
   favoriteUserIds?: string[];
   emergencyContact?: {
     name: string;
@@ -107,6 +108,15 @@ export interface Ride {
   ratingReason?: RatingReason;
   createdAt: any;
   updatedAt?: any;
+  acceptedAt?: any;
+  arrivedAt?: any;
+  startedAt?: any;
+  completedAt?: any;
+  passengerConfirmedArrival?: boolean;
+  passengerConfirmedStart?: boolean;
+  passengerConfirmedEnd?: boolean;
+  riderConfirmedEnd?: boolean;
+  isOnTime?: boolean;
 }
 
 // User Profile Actions

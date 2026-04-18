@@ -4,7 +4,7 @@ import { UserProfile, createRideRequest, subscribeToUserRides, Ride, updateRideS
 import { MapPin, Navigation, Clock, CreditCard, ChevronRight, X, Loader2, CheckCircle2, Navigation2, Star, User as UserIcon, Tag, Map as MapIcon, ShieldCheck, Award, Timer, Compass, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from './NotificationCenter';
-import { updateDoc, doc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { updateDoc, doc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
   user: FirebaseUser;
@@ -29,6 +29,9 @@ export default function PassengerDashboard({ user, profile }: Props) {
   const [ratingReason, setRatingReason] = useState<RatingReason | ''>('');
   const [isRating, setIsRating] = useState(false);
   
+  // ETA logic
+  const [eta, setEta] = useState<number | null>(null);
+
   // Location logic
   const [isLocating, setIsLocating] = useState(false);
 
@@ -156,6 +159,19 @@ export default function PassengerDashboard({ user, profile }: Props) {
     return unsubscribe;
   }, [user.uid, addNotification]);
 
+  useEffect(() => {
+    if (activeRide?.status === 'accepted' && riderProfile?.currentLocation && passengerLocation) {
+      // Basic distance calculation for ETA (roughly 2 mins per 0.01 lat/lng diff)
+      const latDiff = Math.abs(riderProfile.currentLocation.lat - passengerLocation.lat);
+      const lngDiff = Math.abs(riderProfile.currentLocation.lng - passengerLocation.lng);
+      const distance = Math.sqrt(Math.pow(latDiff, 2) + Math.pow(lngDiff, 2));
+      const estimatedMinutes = Math.max(1, Math.round(distance * 200)); 
+      setEta(estimatedMinutes);
+    } else {
+      setEta(null);
+    }
+  }, [activeRide?.status, riderProfile?.currentLocation, passengerLocation]);
+
   // Track rider profile when accepted
   useEffect(() => {
     if (activeRide?.riderId) {
@@ -237,6 +253,43 @@ export default function PassengerDashboard({ user, profile }: Props) {
     } finally {
       setIsRating(false);
     }
+  };
+
+  const handleConfirmArrival = async () => {
+    if (!activeRide) return;
+    try {
+      await updateDoc(doc(db, 'rides', activeRide.id), {
+        passengerConfirmedArrival: true,
+        isOnTime: eta !== null, // If confirmed while we had an ETA
+        updatedAt: serverTimestamp()
+      });
+      addNotification('Arrival Confirmed', 'You have confirmed the driver has arrived.', 'success');
+    } catch (e) { console.error(e); }
+  };
+
+  const handleConfirmStart = async () => {
+    if (!activeRide) return;
+    try {
+      await updateDoc(doc(db, 'rides', activeRide.id), {
+        passengerConfirmedStart: true,
+        status: 'ongoing',
+        startedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      addNotification('Trip Started', 'Enjoy your ride!', 'success');
+    } catch (e) { console.error(e); }
+  };
+
+  const handleConfirmReached = async () => {
+    if (!activeRide) return;
+    try {
+      await updateDoc(doc(db, 'rides', activeRide.id), {
+        passengerConfirmedEnd: true,
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) { console.error(e); }
   };
 
   const handleMapClick = async (e: MouseEvent) => {
@@ -435,8 +488,20 @@ export default function PassengerDashboard({ user, profile }: Props) {
                   {activeRide.status}
                 </div>
                 <h3 className="text-3xl font-bold mb-2 leading-tight">
-                  {activeRide.status === 'requested' ? 'Finding a rider...' : activeRide.status === 'accepted' ? 'Rider is on the way' : activeRide.status === 'arrived' ? 'Rider has arrived' : 'Your ride is ongoing'}
+                  {activeRide.status === 'requested' ? 'Finding a rider...' : activeRide.status === 'accepted' ? 'Rider is on the way' : activeRide.status === 'arrived' ? (activeRide.passengerConfirmedArrival ? 'Trip starting soon' : 'Rider has arrived') : 'Your ride is ongoing'}
                 </h3>
+                {eta !== null && activeRide.status === 'accepted' && (
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider mt-1">
+                    <Timer className="w-3 h-3" />
+                    <span>ETA: {eta} mins away</span>
+                  </div>
+                )}
+                {activeRide.isOnTime && (
+                  <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold uppercase tracking-widest mt-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    On Time Driver
+                  </div>
+                )}
               </div>
               
               {riderProfile && (
@@ -507,26 +572,61 @@ export default function PassengerDashboard({ user, profile }: Props) {
               </div>
             </div>
 
-            <div className="pt-6 border-t border-white/10 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Estimated Fare</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-3xl font-bold">${activeRide.fare}</p>
-                  {activeRide.promoCode && (
-                    <div className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide">
-                      Promo: {activeRide.promoCode}
-                    </div>
-                  )}
+            <div className="pt-6 border-t border-white/10 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Estimated Fare</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-3xl font-bold">${activeRide.fare}</p>
+                    {activeRide.promoCode && (
+                      <div className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide">
+                        Promo: {activeRide.promoCode}
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {activeRide.status === 'requested' && (
+                  <button 
+                    onClick={() => setShowCancelModal(true)}
+                    className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
-              {activeRide.status === 'requested' && (
-                <button 
-                  onClick={() => setShowCancelModal(true)}
-                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-bold transition-colors"
-                >
-                  Cancel
-                </button>
-              )}
+
+              {/* Handshake Buttons */}
+              <div className="flex flex-col gap-2">
+                {activeRide.status === 'arrived' && !activeRide.passengerConfirmedArrival && (
+                  <button 
+                    onClick={handleConfirmArrival}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Confirm Driver Arrival
+                  </button>
+                )}
+
+                {activeRide.status === 'arrived' && activeRide.passengerConfirmedArrival && activeRide.riderConfirmedStart && (
+                  <button 
+                    onClick={handleConfirmStart}
+                    className="w-full bg-white text-black py-4 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Navigation2 className="w-5 h-5" />
+                    Approve Trip Start
+                  </button>
+                )}
+
+                {activeRide.status === 'ongoing' && activeRide.riderConfirmedEnd && (
+                  <button 
+                    onClick={handleConfirmReached}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Award className="w-5 h-5" />
+                    Confirm We've Arrived
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </motion.div>
