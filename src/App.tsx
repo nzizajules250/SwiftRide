@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { auth, getUserProfile, UserProfile } from './lib/firebase';
+import { auth, getUserProfile, UserProfile, subscribeToUserProfile } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { Moon, Sun, Car, LogOut, History, Smartphone, Loader2, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,8 +14,11 @@ import RideHistory from './components/RideHistory';
 import ProfileView from './components/ProfileView';
 import Auth from './components/Auth';
 import { NotificationProvider } from './components/NotificationCenter';
+import { LanguageProvider, useLanguage } from './lib/i18n';
+import LanguageSelector from './components/LanguageSelector';
 
-export default function App() {
+function AppContent() {
+  const { language, t } = useLanguage();
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,18 +42,38 @@ export default function App() {
   }, [isDark]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
+        // Initial fetch
         const p = await getUserProfile(user.uid);
         setProfile(p);
+        
+        // Subscription for real-time updates (e.g. after editing profile)
+        unsubscribeProfile = subscribeToUserProfile(user.uid, (updatedProfile) => {
+          setProfile(updatedProfile);
+        });
       } else {
         setProfile(null);
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+          unsubscribeProfile = null;
+        }
       }
       setLoading(false);
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
+
+  if (!language) {
+    return <LanguageSelector />;
+  }
 
   if (loading) {
     return (
@@ -70,7 +93,7 @@ export default function App() {
         <nav className="bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800 sticky top-0 z-50">
           <div className="max-w-screen-xl mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-black dark:bg-white rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-black dark:bg-white rounded-lg flex items-center justify-center cursor-pointer" onClick={() => setView('dashboard')}>
                 <Car className="w-5 h-5 text-white dark:text-black" />
               </div>
               <span className="font-bold text-xl tracking-tight dark:text-white">SwiftRide</span>
@@ -86,7 +109,7 @@ export default function App() {
 
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold dark:text-white">{profile.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{profile.role}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{t(profile.role as any)}</p>
               </div>
               <button 
                 onClick={() => setView('profile')}
@@ -146,34 +169,42 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-gray-200 dark:border-zinc-800 rounded-full p-2 shadow-2xl flex items-center gap-2 z-50 overflow-hidden">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-gray-200 dark:border-zinc-800 rounded-full p-2 shadow-2xl flex items-center gap-2 z-50 overflow-hidden text-sm">
           <button 
             onClick={() => setView('dashboard')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'dashboard' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'dashboard' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg text-[10px] uppercase tracking-widest' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
           >
             <Smartphone className="w-5 h-5" />
-            <span>Ride</span>
+            <span>{profile.role === 'passenger' ? t('passenger') : t('rider')}</span>
           </button>
           <button 
             onClick={() => setView('history')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'history' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'history' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg text-[10px] uppercase tracking-widest' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
           >
             <History className="w-5 h-5" />
-            <span>History</span>
+            <span>{t('history')}</span>
           </button>
           <button 
             onClick={() => setView('profile')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'profile' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'profile' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg text-[10px] uppercase tracking-widest' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
           >
             {profile.avatarUrl ? (
               <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" className={`w-5 h-5 rounded-full object-cover transition-all ${view === 'profile' ? 'ring-1 ring-white dark:ring-black' : ''}`} />
             ) : (
               <UserIcon className="w-5 h-5" />
             )}
-            <span>Profile</span>
+            <span>{t('profile')}</span>
           </button>
         </div>
       </div>
     </NotificationProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }

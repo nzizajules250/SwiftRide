@@ -4,6 +4,7 @@ import { UserProfile, subscribeToAvailableRides, subscribeToUserRides, Ride, upd
 import { MapPin, Navigation, DollarSign, CheckCircle2, Navigation2, Loader2, ArrowRight, User, Award, ShieldCheck, Star, Car, Heart, Timer, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from './NotificationCenter';
+import { useLanguage } from '../lib/i18n';
 import { arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function RiderDashboard({ user, profile }: Props) {
+  const { t } = useLanguage();
   const { addNotification } = useNotifications();
   const [availableRides, setAvailableRides] = useState<Ride[]>([]);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
@@ -61,7 +63,7 @@ export default function RiderDashboard({ user, profile }: Props) {
       }
 
       if (filtered.length > prevRidesCount.current) {
-        addNotification('New Ride Request!', 'A new passenger is looking for a ride nearby.', 'ride_request');
+        addNotification(t('newRideRequest'), t('newRideRequestMessage'), 'ride_request');
       }
       prevRidesCount.current = filtered.length;
       setAvailableRides(filtered);
@@ -72,9 +74,9 @@ export default function RiderDashboard({ user, profile }: Props) {
       const active = rides.find(r => ['accepted', 'arrived', 'ongoing'].includes(r.status));
       if (active && active.status !== lastStatusRef.current) {
         if (active.status === 'arrived') {
-          addNotification('Arrived!', 'You have marked yourself as arrived at the pickup location.', 'info');
+          addNotification(t('riderArrivedNotify'), 'You have marked yourself as arrived at the pickup location.', 'info');
         } else if (active.status === 'ongoing') {
-          addNotification('Trip In Progress', 'You have started the ride with the passenger.', 'info');
+          addNotification(t('tripStartedNotify'), 'You have started the ride with the passenger.', 'info');
         }
         lastStatusRef.current = active.status;
       }
@@ -124,7 +126,7 @@ export default function RiderDashboard({ user, profile }: Props) {
         favoriteUserIds: isFavorite ? arrayRemove(targetUserId) : arrayUnion(targetUserId)
       });
       addNotification(
-        isFavorite ? 'Removed from Favorites' : 'Added to Favorites',
+        isFavorite ? t('favorites') : t('favorites'),
         isFavorite ? 'Passenger removed from your preferred list.' : 'Passenger added to your preferred list.',
         'info'
       );
@@ -175,7 +177,7 @@ export default function RiderDashboard({ user, profile }: Props) {
   if (activeRide) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold tracking-tight">Active Duty</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t('activeDuty')}</h2>
         
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
@@ -196,20 +198,20 @@ export default function RiderDashboard({ user, profile }: Props) {
                 <div>
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-xs font-bold uppercase tracking-wider mb-4">
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    {activeRide.status}
+                    {t(activeRide.status as any)}
                   </div>
                   <h3 className="text-4xl font-bold mb-2">
-                    {activeRide.status === 'accepted' ? 'Heading to pickup' : activeRide.status === 'arrived' ? 'Waiting at pickup' : 'Heading to destination'}
+                    {activeRide.status === 'accepted' ? t('headingToPickup') : activeRide.status === 'arrived' ? t('waitingAtPickup') : t('headingToDestination')}
                   </h3>
                   {passengerProfile && (
                       <p className="text-sm font-medium text-white/60">
-                        Passenger: <span className="text-white font-bold">{passengerProfile.name}</span>
+                        {t('passenger')}: <span className="text-white font-bold">{passengerProfile.name}</span>
                       </p>
                   )}
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Earning</p>
+                <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">{t('earned')}</p>
                 <p className="text-3xl font-bold text-emerald-400">${activeRide.fare}</p>
               </div>
             </div>
@@ -220,7 +222,7 @@ export default function RiderDashboard({ user, profile }: Props) {
                   <MapPin className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Pickup</p>
+                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">{t('pickupLocation')}</p>
                   <p className="font-medium text-lg leading-tight">{activeRide.pickup.address}</p>
                 </div>
               </div>
@@ -229,7 +231,7 @@ export default function RiderDashboard({ user, profile }: Props) {
                   <Navigation className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Destination</p>
+                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">{t('destinationAddress')}</p>
                   <p className="font-medium text-lg leading-tight">{activeRide.destination.address}</p>
                 </div>
               </div>
@@ -243,9 +245,9 @@ export default function RiderDashboard({ user, profile }: Props) {
               }
               className="w-full bg-white text-black py-5 px-6 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-gray-100 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {activeRide.status === 'accepted' ? 'I have Arrived' : 
-               activeRide.status === 'arrived' ? (activeRide.riderConfirmedStart ? 'Waiting for Passenger...' : 'Start Trip') : 
-               (activeRide.riderConfirmedEnd ? 'Waiting for Passenger...' : 'Complete Ride')}
+              {activeRide.status === 'accepted' ? t('arrivedButton') : 
+               activeRide.status === 'arrived' ? (activeRide.riderConfirmedStart ? t('waitingForPassenger') : t('startTripButton')) : 
+               (activeRide.riderConfirmedEnd ? t('waitingForPassenger') : t('completeRideButton'))}
               <ArrowRight className="w-6 h-6" />
             </button>
 
@@ -253,7 +255,7 @@ export default function RiderDashboard({ user, profile }: Props) {
               <div className="flex justify-center">
                 <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest flex items-center gap-2">
                   <Timer className="w-3 h-3" />
-                  Time is counting. Be on time!
+                  {t('beOnTime')}
                 </p>
               </div>
             )}
@@ -298,7 +300,7 @@ export default function RiderDashboard({ user, profile }: Props) {
             className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-100"
           >
             <div className={`w-2 h-2 rounded-full ${profile.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
-            <span className="font-bold text-xs uppercase tracking-wider">{profile.isOnline ? 'Available' : 'Unavailable'}</span>
+            <span className="font-bold text-xs uppercase tracking-wider">{profile.isOnline ? t('available') : t('unavailable')}</span>
           </button>
         </div>
       </div>
@@ -333,14 +335,14 @@ export default function RiderDashboard({ user, profile }: Props) {
             <span>50 KM</span>
           </div>
           <p className="text-xs text-gray-400 font-medium leading-relaxed">
-            You will only receive notifications for ride requests within this distance from your current location.
+            {t('availabilityRadiusDescription')}
           </p>
         </div>
       </motion.div>
 
       <div>
-        <h2 className="text-4xl font-bold tracking-tight mb-2">Available Jobs</h2>
-        <p className="text-gray-500">Pick up passengers nearby.</p>
+        <h2 className="text-4xl font-bold tracking-tight mb-2">{t('availableJobs')}</h2>
+        <p className="text-gray-500">{t('pickupPassengersNearby')}</p>
       </div>
 
       <AnimatePresence mode="popLayout">
@@ -353,8 +355,8 @@ export default function RiderDashboard({ user, profile }: Props) {
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
               <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
             </div>
-            <p className="font-semibold text-gray-900">Waiting for requests...</p>
-            <p className="text-sm text-gray-400">Fresh rides will appear here in real-time.</p>
+            <p className="font-semibold text-gray-900">{t('waitingForRequests')}</p>
+            <p className="text-sm text-gray-400">{t('freshRidesAppear')}</p>
           </motion.div>
         ) : (
           <div className="grid gap-4">
@@ -373,8 +375,8 @@ export default function RiderDashboard({ user, profile }: Props) {
                       <User className="w-6 h-6 text-gray-300" />
                     </div>
                     <div>
-                      <p className="font-bold">Passenger Request</p>
-                      <p className="text-xs text-gray-400">~ 2.4 miles away</p>
+                      <p className="font-bold">{t('passengerRequest')}</p>
+                      <p className="text-xs text-gray-400">~ 2.4 bits {t('away')}</p>
                     </div>
                   </div>
                   <div className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl font-bold text-lg">
@@ -403,7 +405,7 @@ export default function RiderDashboard({ user, profile }: Props) {
                   onClick={() => handleAccept(ride.id)}
                   className="w-full bg-black text-white py-4 px-6 rounded-2xl font-bold flex items-center justify-between hover:bg-gray-800 transition-all group-hover:scale-[1.02] shadow-xl shadow-black/5"
                 >
-                  Accept Ride
+                  {t('acceptRide')}
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </motion.div>
@@ -415,10 +417,10 @@ export default function RiderDashboard({ user, profile }: Props) {
       {/* Badges Section */}
       <div className="space-y-6 pt-12">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold tracking-tight">Your Achievements</h3>
+          <h3 className="text-xl font-bold tracking-tight">{t('achievements')}</h3>
           <div className="flex items-center gap-1 text-amber-500 font-bold text-sm">
             <Star className="w-4 h-4 fill-current" />
-            {profile.rating} Rating
+            {profile.rating} {t('rating')}
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -439,7 +441,7 @@ export default function RiderDashboard({ user, profile }: Props) {
               {badge.earned && (
                 <div className="mt-4 flex items-center gap-1.5 text-[9px] font-bold text-emerald-600 uppercase tracking-wider">
                   <CheckCircle2 className="w-3 h-3" />
-                  Earned
+                  {t('earnedBadge')}
                 </div>
               )}
             </motion.div>

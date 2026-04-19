@@ -3,12 +3,14 @@ import { auth, createUserProfile, getUserProfile, UserProfile, UserRole, googleP
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { Car, Smartphone, Shield, ArrowRight, Loader2, Mail, Lock, User, Phone, Calendar, ClipboardCheck, Camera, Info, Languages, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useLanguage } from '../lib/i18n';
 
 interface AuthProps {
   onAuthSuccess: (profile: UserProfile) => void;
 }
 
 export default function Auth({ onAuthSuccess }: AuthProps) {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [role, setRole] = useState<UserRole>('passenger');
   const [loading, setLoading] = useState(false);
@@ -70,12 +72,12 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         if (profile) {
           onAuthSuccess(profile);
         } else {
-          setError('Profile not found. Please register.');
+          setError(t('profileNotFound'));
         }
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Authentication failed');
+      setError(err.message || t('authFailed'));
     } finally {
       setLoading(false);
     }
@@ -131,7 +133,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             <Car className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 leading-tight">SwiftRide</h1>
-          <p className="text-gray-500 font-medium">Empowering your daily journey</p>
+          <p className="text-gray-500 font-medium">{t('empoweringJourney')}</p>
         </div>
 
         <div className="flex bg-gray-100 p-1 rounded-2xl mb-8">
@@ -139,13 +141,13 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             onClick={() => setMode('login')}
             className={`flex-1 py-3 rounded-xl font-bold transition-all ${mode === 'login' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}
           >
-            Login
+            {t('login')}
           </button>
           <button 
             onClick={() => setMode('register')}
             className={`flex-1 py-3 rounded-xl font-bold transition-all ${mode === 'register' ? 'bg-white text-black shadow-sm' : 'text-gray-400'}`}
           >
-            Register
+            {t('register')}
           </button>
         </div>
 
@@ -156,14 +158,14 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
               className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${role === 'passenger' ? 'border-black bg-black text-white' : 'border-gray-50 bg-gray-50 text-gray-400'}`}
             >
               <Smartphone className="w-6 h-6" />
-              <span className="text-xs font-bold uppercase tracking-widest">Passenger</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{t('passenger')}</span>
             </button>
             <button 
               onClick={() => setRole('rider')}
               className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${role === 'rider' ? 'border-black bg-black text-white' : 'border-gray-50 bg-gray-50 text-gray-400'}`}
             >
               <Shield className="w-6 h-6" />
-              <span className="text-xs font-bold uppercase tracking-widest">Rider</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{t('rider')}</span>
             </button>
           </div>
         )}
@@ -186,7 +188,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
               <input 
                 type="text"
                 required
-                placeholder="Full Name"
+                placeholder={t('fullName')}
                 className="w-full bg-gray-50 py-4 pl-12 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium"
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
@@ -199,7 +201,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             <input 
               type="tel"
               required
-              placeholder="Phone Number (e.g. +250...)"
+              placeholder={t('phoneNumber')}
               className="w-full bg-gray-50 py-4 pl-12 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium"
               value={formData.phone}
               onChange={e => setFormData({...formData, phone: e.target.value})}
@@ -211,7 +213,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             <input 
               type="password"
               required
-              placeholder="Password"
+              placeholder={t('password')}
               className="w-full bg-gray-50 py-4 pl-12 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium"
               value={formData.password}
               onChange={e => setFormData({...formData, password: e.target.value})}
@@ -226,7 +228,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                 exit={{ opacity: 0, height: 0 }}
                 className="space-y-4 pt-4 border-t border-gray-100"
               >
-                <p className="text-[10px] font-asbold uppercase tracking-[0.2em] text-gray-400 text-center">Rider Credentials</p>
+                <p className="text-[10px] font-asbold uppercase tracking-[0.2em] text-gray-400 text-center">{t('riderCredentials')}</p>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="relative">
@@ -237,9 +239,9 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                       onChange={e => setFormData({...formData, gender: e.target.value})}
                       required
                     >
-                      <option value="">Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
+                      <option value="">{t('gender')}</option>
+                      <option value="Male">{t('male')}</option>
+                      <option value="Female">{t('female')}</option>
                     </select>
                   </div>
                   <div className="relative">
@@ -262,15 +264,15 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                       value={formData.vehicleType}
                       onChange={e => setFormData({...formData, vehicleType: e.target.value as any})}
                     >
-                      <option value="car">Car</option>
-                      <option value="motorcycle">Motorcycle</option>
+                      <option value="car">{t('car')}</option>
+                      <option value="motorcycle">{t('motorcycle')}</option>
                     </select>
                   </div>
                   <div className="relative">
                     <ClipboardCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
                     <input 
                       type="text"
-                      placeholder="License Class"
+                      placeholder={t('licenseClass')}
                       className="w-full bg-gray-50 py-4 pl-10 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium text-sm"
                       value={formData.licenseClass}
                       onChange={e => setFormData({...formData, licenseClass: e.target.value})}
@@ -283,7 +285,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                   <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
                   <input 
                     type="text"
-                    placeholder="Vehicle Model (e.g. Toyota RAV4)"
+                    placeholder={t('vehicleModelPlaceholder')}
                     className="w-full bg-gray-50 py-4 pl-12 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium text-sm"
                     value={formData.vehicleModel}
                     onChange={e => setFormData({...formData, vehicleModel: e.target.value})}
@@ -295,7 +297,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                   <Languages className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
                   <input 
                     type="text"
-                    placeholder="Number Plate"
+                    placeholder={t('numberPlatePlaceholder')}
                     className="w-full bg-gray-50 py-4 pl-12 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium text-sm uppercase"
                     value={formData.numberPlate}
                     onChange={e => setFormData({...formData, numberPlate: e.target.value})}
@@ -307,7 +309,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                   <Camera className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
                   <input 
                     type="url"
-                    placeholder="Profile Picture URL"
+                    placeholder={t('profilePictureUrl')}
                     className="w-full bg-gray-50 py-4 pl-12 pr-4 rounded-2xl border-none focus:ring-2 focus:ring-black outline-none font-medium text-sm"
                     value={formData.avatarUrl}
                     onChange={e => setFormData({...formData, avatarUrl: e.target.value})}
@@ -324,7 +326,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
           >
             {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
               <>
-                {mode === 'login' ? 'Sign In' : 'Create Account'}
+                {mode === 'login' ? t('signIn') : t('createAccount')}
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
@@ -333,7 +335,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
         <div className="my-8 flex items-center gap-4 text-gray-300">
           <div className="flex-1 h-px bg-gray-100" />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Or continue with</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest">{t('continueWith')}</span>
           <div className="flex-1 h-px bg-gray-100" />
         </div>
 
@@ -352,7 +354,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         </button>
 
         <p className="mt-8 text-center text-xs text-gray-400 font-medium">
-          By continuing, you agree to SwiftRide's <span className="underline cursor-pointer">Terms of Service</span> and <span className="underline cursor-pointer">Privacy Policy</span>.
+          {t('authTerms')}
         </p>
       </motion.div>
     </div>

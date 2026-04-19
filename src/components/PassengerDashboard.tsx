@@ -1,9 +1,10 @@
 import { useState, useEffect, MouseEvent, useRef } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { UserProfile, createRideRequest, subscribeToUserRides, Ride, updateRideStatus, subscribeToUserProfile, rateRide, validatePromoCode, PromoCode, RatingReason, reverseGeocode, db, subscribeToOnlineRiders } from '../lib/firebase';
-import { MapPin, Navigation, Clock, CreditCard, ChevronRight, X, Loader2, CheckCircle2, Navigation2, Star, User as UserIcon, Tag, Map as MapIcon, ShieldCheck, Award, Timer, Compass, Heart } from 'lucide-react';
+import { MapPin, Navigation, Clock, CreditCard, ChevronRight, X, Loader2, CheckCircle2, Navigation2, Star, User as UserIcon, Tag, Map as MapIcon, ShieldCheck, Award, Timer, Compass, Heart, Phone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from './NotificationCenter';
+import { useLanguage } from '../lib/i18n';
 import { updateDoc, doc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function PassengerDashboard({ user, profile }: Props) {
+  const { t } = useLanguage();
   const { addNotification } = useNotifications();
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
@@ -139,17 +141,17 @@ export default function PassengerDashboard({ user, profile }: Props) {
       
       if (active && active.status !== lastStatusRef.current) {
         if (active.status === 'accepted') {
-          addNotification('Ride Accepted!', 'A rider is on the way to your location.', 'ride_accepted');
+          addNotification(t('rideAccepted'), t('riderOnWay'), 'ride_accepted');
         } else if (active.status === 'arrived') {
-          addNotification('Rider Arrived!', 'Your rider has arrived at the pickup location.', 'ride_accepted');
+          addNotification(t('riderArrivedNotify'), t('riderArrivedMessage'), 'ride_accepted');
         } else if (active.status === 'ongoing') {
-          addNotification('Ride Started', 'You are now on your way to the destination.', 'info');
+          addNotification(t('tripStartedNotify'), t('tripStartedMessage'), 'info');
         }
         lastStatusRef.current = active.status;
       }
 
       if (justCompleted && lastStatusRef.current !== 'completed') {
-        addNotification('Trip Completed', 'You have arrived at your destination. Please rate your rider.', 'success');
+        addNotification(t('tripCompletedNotify'), t('tripCompletedMessage'), 'success');
         lastStatusRef.current = 'completed';
       }
 
@@ -263,7 +265,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
         isOnTime: eta !== null, // If confirmed while we had an ETA
         updatedAt: serverTimestamp()
       });
-      addNotification('Arrival Confirmed', 'You have confirmed the driver has arrived.', 'success');
+      addNotification(t('confirmedArrival'), 'You have confirmed the driver has arrived.', 'success');
     } catch (e) { console.error(e); }
   };
 
@@ -276,7 +278,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
         startedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      addNotification('Trip Started', 'Enjoy your ride!', 'success');
+      addNotification(t('tripStartedNotify'), 'Enjoy your ride!', 'success');
     } catch (e) { console.error(e); }
   };
 
@@ -327,7 +329,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
           <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-10 h-10" />
           </div>
-          <h2 className="text-2xl font-bold">You've Arrived!</h2>
+          <h2 className="text-2xl font-bold">{t('tripCompletedNotify')}</h2>
           <p className="text-gray-500">Rate your journey with SwiftRide</p>
         </div>
 
@@ -367,7 +369,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
           disabled={rating === 0 || !ratingReason || isRating}
           className="w-full bg-black text-white py-5 rounded-3xl font-bold disabled:opacity-50 hover:bg-gray-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-black/10"
         >
-          {isRating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Submit Feedback"}
+          {isRating ? <Loader2 className="w-5 h-5 animate-spin" /> : t('submitFeedback')}
         </button>
       </motion.div>
     );
@@ -441,7 +443,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
                     <Navigation2 className="w-4 h-4 text-white fill-current" />
                   </div>
                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    Rider: {riderProfile.name}
+                    {t('rider')}: {riderProfile.name}
                   </div>
                 </div>
               </motion.div>
@@ -488,13 +490,31 @@ export default function PassengerDashboard({ user, profile }: Props) {
                   {activeRide.status}
                 </div>
                 <h3 className="text-3xl font-bold mb-2 leading-tight">
-                  {activeRide.status === 'requested' ? 'Finding a rider...' : activeRide.status === 'accepted' ? 'Rider is on the way' : activeRide.status === 'arrived' ? (activeRide.passengerConfirmedArrival ? 'Trip starting soon' : 'Rider has arrived') : 'Your ride is ongoing'}
+                  {activeRide.status === 'requested' ? t('findingRider') : activeRide.status === 'accepted' ? t('riderOnWay') : activeRide.status === 'arrived' ? (activeRide.passengerConfirmedArrival ? t('arrivingSoon') : t('riderArrivedNotify')) : t('tripStartedNotify')}
                 </h3>
                 {eta !== null && activeRide.status === 'accepted' && (
-                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider mt-1">
-                    <Timer className="w-3 h-3" />
-                    <span>ETA: {eta} mins away</span>
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col gap-1 mt-4 p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-400 font-black text-[10px] uppercase tracking-[0.2em]">
+                        <Timer className="w-3.5 h-3.5" />
+                        <span>Live ETA</span>
+                      </div>
+                      <span className="text-emerald-400 font-black text-lg">{eta} <span className="text-[10px] uppercase">{t('minutes')}</span></span>
+                    </div>
+                    <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden mt-2">
+                      <motion.div 
+                        initial={{ width: "0%" }}
+                        animate={{ width: "100%" }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="h-full bg-emerald-500 shadow-[0_0_10px_#10b981]"
+                      />
+                    </div>
+                    <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest mt-1">Rider is filtering through traffic</p>
+                  </motion.div>
                 )}
                 {activeRide.isOnTime && (
                   <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold uppercase tracking-widest mt-1">
@@ -557,7 +577,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
                   <MapPin className="w-4 h-4 text-white/50" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-0.5">Pickup</p>
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-0.5">{t('pickupLocation')}</p>
                   <p className="font-medium leading-tight">{activeRide.pickup.address}</p>
                 </div>
               </div>
@@ -566,7 +586,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
                   <Navigation className="w-4 h-4 text-white/50" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-0.5">Destination</p>
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-0.5">{t('destinationAddress')}</p>
                   <p className="font-medium leading-tight">{activeRide.destination.address}</p>
                 </div>
               </div>
@@ -575,7 +595,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
             <div className="pt-6 border-t border-white/10 flex flex-col gap-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Estimated Fare</p>
+                  <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">{t('totalFare')}</p>
                   <div className="flex items-center gap-2">
                     <p className="text-3xl font-bold">${activeRide.fare}</p>
                     {activeRide.promoCode && (
@@ -590,7 +610,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
                     onClick={() => setShowCancelModal(true)}
                     className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-2xl font-bold transition-colors"
                   >
-                    Cancel
+                    {t('cancel')}
                   </button>
                 )}
               </div>
@@ -648,13 +668,13 @@ export default function PassengerDashboard({ user, profile }: Props) {
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
                 className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 relative z-10 shadow-2xl"
               >
-                <h3 className="text-2xl font-bold mb-4">Cancel Ride?</h3>
-                <p className="text-gray-500 mb-6">Please let us know why you are cancelling.</p>
+                <h3 className="text-2xl font-bold mb-4">{t('cancelRideTitle')}</h3>
+                <p className="text-gray-500 mb-6">{t('cancelRideDesc')}</p>
                 
                 <textarea 
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="Reason for cancellation (optional)"
+                  placeholder={t('cancelPlaceholder')}
                   className="w-full bg-gray-50 rounded-2xl p-4 border-none focus:ring-2 focus:ring-black outline-none mb-6 resize-none min-h-[100px]"
                 />
 
@@ -663,14 +683,14 @@ export default function PassengerDashboard({ user, profile }: Props) {
                     onClick={() => setShowCancelModal(false)}
                     className="flex-1 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors"
                   >
-                    Keep Ride
+                    {t('keepRide')}
                   </button>
                   <button 
                     onClick={handleCancelRide}
                     disabled={isCancelling}
                     className="flex-1 bg-black text-white py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
                   >
-                    {isCancelling ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm"}
+                    {isCancelling ? <Loader2 className="w-5 h-5 animate-spin" /> : t('confirm')}
                   </button>
                 </div>
               </motion.div>
@@ -684,8 +704,8 @@ export default function PassengerDashboard({ user, profile }: Props) {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-4xl font-bold tracking-tight mb-2 text-gray-900">Where to?</h2>
-        <p className="text-gray-500 font-medium">Request a ride in seconds.</p>
+        <h2 className="text-4xl font-bold tracking-tight mb-2 text-gray-900">{t('whereTo')}</h2>
+        <p className="text-gray-500 font-medium">{t('requestRide')}</p>
       </div>
 
       <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4">
@@ -694,7 +714,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
           <div className="absolute left-[1.125rem] top-[60%] w-0.5 h-full bg-gray-100" />
           <input 
             type="text"
-            placeholder="Pickup location"
+            placeholder={t('pickupLocation')}
             value={pickup}
             onChange={(e) => setPickup(e.target.value)}
             className="w-full bg-gray-50 py-5 pl-12 pr-24 rounded-[1.5rem] border-none focus:ring-2 focus:ring-black transition-all outline-none"
@@ -721,7 +741,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
           <div className="absolute left-4 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-gray-300 z-10" />
           <input 
             type="text"
-            placeholder="Destination address"
+            placeholder={t('destinationAddress')}
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             className="w-full bg-gray-50 py-5 pl-12 pr-12 rounded-[1.5rem] border-none focus:ring-2 focus:ring-black transition-all outline-none"
@@ -779,6 +799,72 @@ export default function PassengerDashboard({ user, profile }: Props) {
         </motion.div>
       )}
 
+      {/* Available Riders Nearby */}
+      {!activeRide && onlineRiders.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">{t('nearbyRiders')}</h3>
+            <span className="bg-emerald-500/10 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+              {onlineRiders.length} {t('online')}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-4">
+            {onlineRiders.map((rider) => (
+              <motion.div 
+                key={rider.uid}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="bg-white p-5 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between group hover:border-black transition-all"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    {rider.avatarUrl ? (
+                      <img src={rider.avatarUrl} className="w-14 h-14 rounded-2xl object-cover" alt="" />
+                    ) : (
+                      <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center">
+                        <UserIcon className="w-6 h-6 text-gray-300" />
+                      </div>
+                    )}
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-lg flex items-center justify-center border-2 border-white shadow-sm">
+                      <ShieldCheck className="w-3 h-3 text-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-gray-900">{rider.name}</h4>
+                      {profile.favoriteUserIds?.includes(rider.uid) && (
+                        <Heart className="w-3.5 h-3.5 text-red-500 fill-current" />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                      {rider.vehicleType} • {rider.rating} ★
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => handleToggleFavorite(rider.uid)}
+                    className={`p-3 rounded-2xl transition-all active:scale-95 ${profile.favoriteUserIds?.includes(rider.uid) ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-gray-50 text-gray-400 hover:text-red-500'}`}
+                  >
+                    <Heart className={`w-5 h-5 ${profile.favoriteUserIds?.includes(rider.uid) ? 'fill-current' : ''}`} />
+                  </button>
+                  {rider.phoneNumber && (
+                    <a 
+                      href={`tel:${rider.phoneNumber}`}
+                      className="bg-black text-white p-3 rounded-2xl shadow-lg shadow-black/10 hover:bg-gray-800 transition-all active:scale-95 group-hover:scale-105"
+                      title={t('callRider')}
+                    >
+                      <Phone className="w-5 h-5" />
+                    </a>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Promo Code UI */}
       {!appliedPromo ? (
         <div className="flex gap-2">
@@ -786,7 +872,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
             <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input 
               type="text"
-              placeholder="Promo code (e.g. RIDE50)"
+              placeholder={t('promoPlaceholder' as any) || "Promo code"}
               value={promoInput}
               onChange={(e) => setPromoInput(e.target.value)}
               className="w-full bg-white border border-gray-100 py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-black transition-all text-sm"
@@ -797,7 +883,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
             disabled={!promoInput || isValidatingPromo}
             className="bg-gray-900 text-white px-6 rounded-2xl font-bold text-sm disabled:opacity-50"
           >
-            {isValidatingPromo ? <Loader2 className="w-5 h-5 animate-spin" /> : "Apply"}
+            {isValidatingPromo ? <Loader2 className="w-5 h-5 animate-spin" /> : t('apply')}
           </button>
         </div>
       ) : (
@@ -827,7 +913,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
           className="bg-black text-white p-8 rounded-[2.5rem] flex items-center justify-between shadow-2xl shadow-black/20"
         >
           <div>
-            <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Total Fare</p>
+            <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">{t('totalFare')}</p>
             <div className="flex items-baseline gap-2">
               <p className="text-4xl font-bold">${estimatedFare}</p>
               {appliedPromo && <p className="text-sm text-white/40 line-through">${estimatedFare + (appliedPromo.discountType === 'percentage' ? Math.round(estimatedFare / (1 - appliedPromo.value / 100) - estimatedFare) : appliedPromo.value)}</p>}
@@ -851,11 +937,11 @@ export default function PassengerDashboard({ user, profile }: Props) {
         {isRequesting ? (
           <>
             <Loader2 className="w-6 h-6 animate-spin" />
-            Confirming Match...
+            {t('findingRider')}
           </>
         ) : (
           <>
-            Request SwiftRide
+            {t('requestNow')}
             <ChevronRight className="w-6 h-6" />
           </>
         )}
@@ -863,7 +949,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
 
       {/* Suggested Locations */}
       <div className="space-y-4">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 px-4">Saved Locations</h3>
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 px-4">{t('savedLocations')}</h3>
         <div className="grid gap-2">
           {[
             { name: "Coffee Central", address: "123 Brew St, Downtown", icon: Clock },

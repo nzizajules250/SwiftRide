@@ -4,6 +4,7 @@ import { UserProfile, subscribeToUserRides, Ride, getUserProfile, db } from '../
 import { Clock, MapPin, Navigation, DollarSign, Calendar, ChevronRight, User as UserIcon, Star, X, ShieldCheck, Award, Compass, Search, Tag, Info, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateDoc, doc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { useLanguage } from '../lib/i18n';
 
 interface Props {
   user: FirebaseUser;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function RideHistory({ user, profile }: Props) {
+  const { t } = useLanguage();
   const [history, setHistory] = useState<Ride[]>([]);
   const [riders, setRiders] = useState<Record<string, UserProfile>>({});
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
@@ -55,8 +57,8 @@ export default function RideHistory({ user, profile }: Props) {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-4xl font-bold tracking-tight mb-2 dark:text-white">Trip History</h2>
-        <p className="text-gray-500 dark:text-gray-400">Your past journeys and earnings.</p>
+        <h2 className="text-4xl font-bold tracking-tight mb-2 dark:text-white">{t('tripHistory')}</h2>
+        <p className="text-gray-500 dark:text-gray-400">{t('pastJourneys')}</p>
       </div>
 
       {history.length === 0 ? (
@@ -64,8 +66,8 @@ export default function RideHistory({ user, profile }: Props) {
           <div className="w-16 h-16 bg-gray-50 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
             <HistoryIcon className="w-8 h-8 text-gray-300 dark:text-zinc-700" />
           </div>
-          <p className="font-semibold text-gray-900 dark:text-white">No trips yet</p>
-          <p className="text-sm text-gray-400 dark:text-zinc-500">Complete your first ride to see it here.</p>
+          <p className="font-semibold text-gray-900 dark:text-white">{t('noTrips')}</p>
+          <p className="text-sm text-gray-400 dark:text-zinc-500">{t('completeFirstRide')}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -84,7 +86,7 @@ export default function RideHistory({ user, profile }: Props) {
                     <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-bold dark:text-white">{ride.status === 'completed' ? 'Successful Trip' : 'Cancelled'}</p>
+                    <p className="font-bold dark:text-white">{ride.status === 'completed' ? t('successfulTrip') : t('cancelled')}</p>
                     <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest leading-none">
                       {ride.createdAt?.toDate?.() ? ride.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'}
                     </p>
@@ -101,7 +103,7 @@ export default function RideHistory({ user, profile }: Props) {
                       `$${ride.fare}`
                     )}
                   </p>
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest">{profile.role === 'rider' ? 'Earned' : 'Paid'}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest">{profile.role === 'rider' ? t('earned') : t('paid')}</p>
                 </div>
               </div>
 
@@ -118,7 +120,7 @@ export default function RideHistory({ user, profile }: Props) {
                   <div className="flex items-center gap-3 pt-1">
                     <Clock className="w-4 h-4 text-emerald-500/50" />
                     <p className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-widest">
-                      Trip Duration: {Math.round((ride.completedAt.toDate().getTime() - ride.startedAt.toDate().getTime()) / 60000)} mins
+                      {t('tripDuration')}: {Math.round((ride.completedAt.toDate().getTime() - ride.startedAt.toDate().getTime()) / 60000)} {t('minutes')}
                     </p>
                   </div>
                 )}
@@ -202,14 +204,14 @@ export default function RideHistory({ user, profile }: Props) {
                   <HistoryIcon className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold dark:text-white">Ride #{selectedRide.id.slice(-6).toUpperCase()}</h3>
-                  <p className="text-gray-500 dark:text-gray-400 font-medium">{selectedRide.status === 'completed' ? 'Successfully Completed' : 'Cancelled Excursion'}</p>
+                  <h3 className="text-2xl font-bold dark:text-white">{t('rideDetail')} #{selectedRide.id.slice(-6).toUpperCase()}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 font-medium">{selectedRide.status === 'completed' ? t('successfulTrip') : t('cancelled')}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-10">
                 <div className="bg-gray-50 dark:bg-zinc-800 p-5 rounded-3xl">
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mb-1">Total Fare</p>
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mb-1">{t('totalFare')}</p>
                   <p className="text-3xl font-bold dark:text-white">${selectedRide.fare}</p>
                   {selectedRide.promoCode && (
                     <div className="inline-flex items-center gap-1.5 mt-2 bg-emerald-500/10 text-emerald-600 px-2 py-1 rounded-lg text-[10px] font-bold">
@@ -219,7 +221,7 @@ export default function RideHistory({ user, profile }: Props) {
                   )}
                 </div>
                 <div className="bg-gray-50 dark:bg-zinc-800 p-5 rounded-3xl">
-                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mb-1">Date</p>
+                  <p className="text-[10px] text-gray-400 dark:text-zinc-500 font-bold uppercase tracking-widest mb-1">{t('date')}</p>
                   <p className="text-xl font-bold dark:text-white">
                     {selectedRide.createdAt?.toDate?.() ? selectedRide.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
                   </p>
