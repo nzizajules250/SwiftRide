@@ -268,27 +268,27 @@ function AppContent() {
         </div>
 
         {/* Desktop Bottom Navigation */}
-        <div className="hidden lg:block fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-gray-200 dark:border-zinc-800 rounded-full p-2 shadow-2xl flex items-center gap-2 z-50 overflow-hidden text-sm">
+        <div className="hidden lg:flex fixed bottom-6 left-1/2 -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700/80 bg-zinc-900/95 p-2 text-sm text-white shadow-2xl shadow-black/20 backdrop-blur-xl z-50">
           <button 
             onClick={() => setView('dashboard')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'dashboard' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg text-[10px] uppercase tracking-widest' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+            className={`flex min-w-[9rem] items-center justify-center gap-2 rounded-full px-6 py-3 font-medium transition-all ${view === 'dashboard' ? 'bg-zinc-100 text-zinc-950 shadow-sm text-[11px] uppercase tracking-[0.24em]' : 'text-zinc-400 hover:bg-white/8 hover:text-white'}`}
           >
             <Smartphone className="w-5 h-5" />
             <span>{profile.role === 'passenger' ? t('passenger') : t('rider')}</span>
           </button>
           <button 
             onClick={() => setView('history')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'history' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg text-[10px] uppercase tracking-widest' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+            className={`flex min-w-[9rem] items-center justify-center gap-2 rounded-full px-6 py-3 font-medium transition-all ${view === 'history' ? 'bg-zinc-100 text-zinc-950 shadow-sm text-[11px] uppercase tracking-[0.24em]' : 'text-zinc-400 hover:bg-white/8 hover:text-white'}`}
           >
             <History className="w-5 h-5" />
             <span>{t('history')}</span>
           </button>
           <button 
             onClick={() => setView('profile')}
-            className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${view === 'profile' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg text-[10px] uppercase tracking-widest' : 'dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+            className={`flex min-w-[9rem] items-center justify-center gap-2 rounded-full px-6 py-3 font-medium transition-all ${view === 'profile' ? 'bg-zinc-100 text-zinc-950 shadow-sm text-[11px] uppercase tracking-[0.24em]' : 'text-zinc-400 hover:bg-white/8 hover:text-white'}`}
           >
             {profile.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" className={`w-5 h-5 rounded-full object-cover transition-all ${view === 'profile' ? 'ring-1 ring-white dark:ring-black' : ''}`} />
+              <img src={profile.avatarUrl} alt="" referrerPolicy="no-referrer" className={`h-5 w-5 rounded-full object-cover transition-all ${view === 'profile' ? 'ring-1 ring-zinc-950' : 'ring-1 ring-transparent'}`} />
             ) : (
               <UserIcon className="w-5 h-5" />
             )}
