@@ -16,4 +16,6 @@ Iyi ni website igiye gufasha abantu gutega moto cyangwa imodoka vuba batavuye ah
 2. Umugenzi asabwa kwiyandikisha ariko birikunozwa neza aho umugenzi atazajya yiyandikisha
    ## Murakoze Gusura Repostory Yange
  Muyisure kuri :<a href="https://ntwara.vercel.app">Ntwara<a/>
+
+*Developed by * : ## Jules_Dev
  
