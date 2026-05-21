@@ -1,11 +1,12 @@
 import { useState, useEffect, MouseEvent, useRef } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { UserProfile, createRideRequest, subscribeToUserRides, Ride, updateRideStatus, subscribeToUserProfile, rateRide, validatePromoCode, PromoCode, RatingReason, reverseGeocode, db, subscribeToOnlineRiders } from '../lib/firebase';
-import { MapPin, Navigation, Clock, CreditCard, ChevronRight, X, Loader2, CheckCircle2, Navigation2, Star, User as UserIcon, Tag, Map as MapIcon, ShieldCheck, Award, Timer, Compass, Heart, Phone } from 'lucide-react';
+import { UserProfile, createRideRequest, subscribeToUserRides, Ride, updateRideStatus, subscribeToUserProfile, rateRide, validatePromoCode, PromoCode, RatingReason, reverseGeocode, db, subscribeToOnlineRiders, saveLocation, removeSavedLocation, getNearbyDrivers, SavedLocation } from '../lib/firebase';
+import { MapPin, Navigation, Clock, CreditCard, ChevronRight, X, Loader2, CheckCircle2, Navigation2, Star, User as UserIcon, Tag, Map as MapIcon, ShieldCheck, Award, Timer, Compass, Heart, Phone, Save, Trash2, MapPinPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from './NotificationCenter';
 import { useLanguage } from '../lib/i18n';
 import { updateDoc, doc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
+import MapComponent from './MapComponent';
 
 interface Props {
   user: FirebaseUser;
@@ -21,6 +22,7 @@ export default function PassengerDashboard({ user, profile }: Props) {
   const [completedRide, setCompletedRide] = useState<Ride | null>(null);
   const [riderProfile, setRiderProfile] = useState<UserProfile | null>(null);
   const [onlineRiders, setOnlineRiders] = useState<UserProfile[]>([]);
+  const [nearbyDrivers, setNearbyDrivers] = useState<UserProfile[]>([]);
   const lastStatusRef = useRef<string | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [estimatedFare, setEstimatedFare] = useState<number | null>(null);
@@ -46,7 +48,55 @@ export default function PassengerDashboard({ user, profile }: Props) {
   // Map Pins
   const [isPickingOnMap, setIsPickingOnMap] = useState<'pickup' | 'destination' | null>(null);
   const [passengerLocation, setPassengerLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [showTraffic, setShowTraffic] = useState(true);
+  
+  // Saved Locations
+  const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(profile.savedLocations || []);
+  const [showSaveLocationModal, setShowSaveLocationModal] = useState(false);
+  const [locationNameToSave, setLocationNameToSave] = useState('');
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
+
+  const handleSaveLocation = async (address: string, lat: number, lng: number) => {
+    if (!locationNameToSave.trim()) {
+      addNotification('Error', 'Please enter a name for this location', 'error');
+      return;
+    }
+    
+    setIsSavingLocation(true);
+    try {
+      await saveLocation(user.uid, {
+        name: locationNameToSave,
+        address,
+        lat,
+        lng
+      });
+      setSavedLocations([...savedLocations, {
+        id: `${Date.now()}`,
+        name: locationNameToSave,
+        address,
+        lat,
+        lng
+      }]);
+      addNotification('Location Saved', `${locationNameToSave} has been saved to your favorites`, 'success');
+      setShowSaveLocationModal(false);
+      setLocationNameToSave('');
+    } catch (e) {
+      console.error(e);
+      addNotification('Error', 'Failed to save location', 'error');
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
+  const handleRemoveSavedLocation = async (locationId: string) => {
+    try {
+      await removeSavedLocation(user.uid, locationId);
+      setSavedLocations(savedLocations.filter(loc => loc.id !== locationId));
+      addNotification('Location Removed', 'Saved location has been deleted', 'success');
+    } catch (e) {
+      console.error(e);
+      addNotification('Error', 'Failed to remove location', 'error');
+    }
+  };
 
   const handleToggleFavorite = async (targetUserId: string) => {
     const isFavorite = profile.favoriteUserIds?.includes(targetUserId);
@@ -134,6 +184,26 @@ export default function PassengerDashboard({ user, profile }: Props) {
     }
   }, [activeRide]);
 
+  // Load nearby drivers when ride is active and passenger location is known
+  useEffect(() => {
+    if (activeRide && passengerLocation && activeRide.status === 'requested') {
+      const loadNearbyDrivers = async () => {
+        try {
+          const drivers = await getNearbyDrivers(passengerLocation.lat, passengerLocation.lng, 10);
+          setNearbyDrivers(drivers);
+        } catch (error) {
+          console.error('Failed to load nearby drivers:', error);
+        }
+      };
+      
+      loadNearbyDrivers();
+      const interval = setInterval(loadNearbyDrivers, 5000); // Refresh every 5 seconds
+      return () => clearInterval(interval);
+    } else {
+      setNearbyDrivers([]);
+    }
+  }, [activeRide, passengerLocation]);
+
   useEffect(() => {
     const unsubscribe = subscribeToUserRides(user.uid, 'passenger', (rides) => {
       const active = rides.find(r => ['requested', 'accepted', 'arrived', 'ongoing'].includes(r.status));
@@ -211,12 +281,12 @@ export default function PassengerDashboard({ user, profile }: Props) {
     try {
       await createRideRequest({
         passengerId: user.uid,
-        pickup: { address: pickup, lat: 0, lng: 0 },
+        pickup: { address: pickup, lat: passengerLocation?.lat || 0, lng: passengerLocation?.lng || 0 },
         destination: { address: destination, lat: 0, lng: 0 },
         status: 'requested',
         fare: estimatedFare,
-        promoCode: appliedPromo?.code || null,
-        discountAmount: appliedPromo ? (estimatedFare / (1 - (appliedPromo.discountType === 'percentage' ? appliedPromo.value / 100 : 0)) - estimatedFare) : 0
+        ...(appliedPromo && { promoCode: appliedPromo.code }),
+        ...(appliedPromo && { discountAmount: (estimatedFare / (1 - (appliedPromo.discountType === 'percentage' ? appliedPromo.value / 100 : 0)) - estimatedFare) })
       });
       setPickup('');
       setDestination('');
@@ -385,102 +455,37 @@ export default function PassengerDashboard({ user, profile }: Props) {
           animate={{ opacity: 1, scale: 1 }}
           className="bg-black text-white rounded-3xl shadow-2xl relative overflow-hidden"
         >
-          <div className="h-48 bg-gray-900 relative overflow-hidden">
-            <div className="absolute inset-0 opacity-20 pointer-events-none">
-              <div className="absolute inset-0 border border-white/10" style={{ background: 'repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.05) 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.05) 40px)' }} />
-            </div>
-            
-            {/* Online Riders (only if status is requested) */}
-            {activeRide.status === 'requested' && onlineRiders.map((rider) => (
-              <motion.div 
-                key={rider.uid}
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ 
-                  opacity: 1, 
-                  scale: 1,
-                  x: rider.currentLocation ? (rider.currentLocation.lng + 0.1278) * 1000 * 5 : 0, 
-                  y: rider.currentLocation ? (rider.currentLocation.lat - 51.5074) * 1000 * 5 : 0 
-                }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-              >
-                <div className="w-4 h-4 bg-emerald-500/40 rounded-full flex items-center justify-center border border-emerald-400">
-                  <Navigation2 className="w-2 h-2 text-emerald-400 fill-current" />
-                </div>
-              </motion.div>
-            ))}
-
-            {/* Real-time traffic mock line */}
-            {showTraffic && (
-              <>
-                <div className="absolute top-1/2 left-0 w-full h-1 bg-red-500/30 blur-sm shadow-[0_0_10px_rgba(239,68,68,0.5)] overflow-hidden">
-                  <motion.div 
-                    animate={{ x: ['100%', '-100%'] }}
-                    transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-                    className="w-full h-full bg-red-400 opacity-50" 
-                  />
-                </div>
-                <div className="absolute top-[48%] left-[20%] w-[30%] h-1 bg-orange-400/50 overflow-hidden">
-                  <motion.div 
-                    animate={{ x: ['100%', '-100%'] }}
-                    transition={{ duration: 15, repeat: Infinity, ease: 'linear' }}
-                    className="w-full h-full bg-orange-300 opacity-50" 
-                  />
-                </div>
-                <div className="absolute top-1/2 right-0 w-[40%] h-1 bg-emerald-500/40 overflow-hidden" />
-              </>
-            )}
-
-            {riderProfile?.currentLocation && (
-              <motion.div 
-                animate={{ 
-                  x: (riderProfile.currentLocation.lng + 0.1278) * 1000 * 5, 
-                  y: (riderProfile.currentLocation.lat - 51.5074) * 1000 * 5 
-                }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20"
-              >
-                <div className="relative group">
-                  <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/50 border-2 border-white">
-                    <Navigation2 className="w-4 h-4 text-white fill-current" />
-                  </div>
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    {t('rider')}: {riderProfile.name}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {passengerLocation && (
-              <motion.div 
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30"
-                style={{ marginLeft: 20, marginTop: 20 }} // Slightly offset passenger from center for demo
-              >
-                <div className="relative group">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/50 border-2 border-white">
-                    <UserIcon className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    You
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            <div className="absolute bottom-4 left-4 z-40">
-              <button 
-                onClick={() => setShowTraffic(!showTraffic)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[8px] font-bold uppercase tracking-wider backdrop-blur-md border transition-all ${showTraffic ? 'bg-red-500/20 text-red-200 border-red-500/30' : 'bg-white/10 text-white/60 border-white/20'}`}
-              >
-                <div className={`w-1.5 h-1.5 rounded-full ${showTraffic ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`} />
-                {showTraffic ? 'Traffic On' : 'Traffic Off'}
-              </button>
-            </div>
-
-            <div className="absolute bottom-4 right-4 z-20 flex gap-2">
-              <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl text-[8px] font-bold uppercase tracking-wider text-white/60">
-                Live Tracking
-              </div>
-            </div>
-          </div>
+          {passengerLocation && (
+            <MapComponent 
+              markers={[
+                {
+                  id: 'passenger',
+                  position: passengerLocation,
+                  label: 'You',
+                  type: 'passenger'
+                },
+                ...(riderProfile?.currentLocation ? [{
+                  id: riderProfile.uid,
+                  position: riderProfile.currentLocation,
+                  label: riderProfile.name,
+                  type: 'rider' as const,
+                  profile: riderProfile
+                }] : []),
+                ...(activeRide.status === 'requested' ? nearbyDrivers
+                  .filter(d => d.currentLocation)
+                  .map(driver => ({
+                    id: driver.uid,
+                    position: driver.currentLocation!,
+                    label: driver.name,
+                    type: 'nearby' as const,
+                    profile: driver
+                  })) : [])
+              ]}
+              center={riderProfile?.currentLocation || passengerLocation}
+              zoom={15}
+              height="384px"
+            />
+          )}
 
           <div className="p-8 relative z-10 flex flex-col h-full justify-between gap-8">
             <div className="flex justify-between items-start">
@@ -591,6 +596,63 @@ export default function PassengerDashboard({ user, profile }: Props) {
                 </div>
               </div>
             </div>
+
+            {/* Nearby Drivers Section - Show when ride is requested and status is active */}
+            {activeRide.status === 'requested' && nearbyDrivers.length > 0 && (
+              <div className="pt-6 border-t border-white/10">
+                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mb-4">Nearby Drivers ({nearbyDrivers.length})</p>
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {nearbyDrivers.slice(0, 5).map((driver) => (
+                    <motion.div 
+                      key={driver.uid}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 flex items-center justify-between border border-white/10 hover:border-white/20 transition-all"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {driver.avatarUrl ? (
+                          <img src={driver.avatarUrl} className="w-10 h-10 rounded-xl object-cover" alt="" />
+                        ) : (
+                          <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                            <UserIcon className="w-5 h-5 text-white/40" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-white truncate">{driver.name}</p>
+                            <div className="flex items-center gap-1 text-amber-400 text-[10px] font-bold">
+                              <Star className="w-3 h-3 fill-current" />
+                              {driver.rating}
+                            </div>
+                          </div>
+                          {driver.badges && driver.badges.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              {driver.badges.map((badge, idx) => (
+                                <span key={idx} className="text-[8px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                                  {badge}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {driver.phoneNumber && (
+                            <p className="text-[10px] text-white/40 font-medium mt-1">{driver.phoneNumber}</p>
+                          )}
+                        </div>
+                      </div>
+                      {driver.phoneNumber && (
+                        <a 
+                          href={`tel:${driver.phoneNumber}`}
+                          className="ml-3 p-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-colors active:scale-95 flex-shrink-0"
+                          title="Call driver"
+                        >
+                          <Phone className="w-4 h-4" />
+                        </a>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="pt-6 border-t border-white/10 flex flex-col gap-4">
               <div className="flex items-center justify-between">
@@ -947,33 +1009,116 @@ export default function PassengerDashboard({ user, profile }: Props) {
         )}
       </button>
 
-      {/* Suggested Locations */}
+      {/* Saved Locations */}
       <div className="space-y-4">
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 px-4">{t('savedLocations')}</h3>
-        <div className="grid gap-2">
-          {[
-            { name: "Coffee Central", address: "123 Brew St, Downtown", icon: Clock },
-            { name: "Global Office", address: "Tech Park II, Unit 4B", icon: ShieldCheck }
-          ].map((loc, i) => (
-            <button 
-              key={i}
-              onClick={() => { setPickup("Search Location"); setDestination(loc.address); }}
-              className="w-full text-left bg-white p-5 rounded-[1.5rem] border border-transparent hover:border-gray-200 transition-all flex items-center justify-between group shadow-sm"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center group-hover:bg-black group-hover:text-white transition-colors">
-                  <loc.icon className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900">{loc.name}</p>
-                  <p className="text-xs text-gray-400 font-medium">{loc.address}</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-black transition-colors" />
-            </button>
-          ))}
+        <div className="flex items-center justify-between px-2">
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">{t('savedLocations')}</h3>
+          <button
+            onClick={() => {
+              if (destination) {
+                setLocationNameToSave('');
+                setShowSaveLocationModal(true);
+              } else {
+                addNotification('Info', 'Set a destination first to save this location', 'info');
+              }
+            }}
+            className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Save current destination"
+          >
+            <Save className="w-4 h-4" />
+          </button>
         </div>
+        
+        {savedLocations.length > 0 ? (
+          <div className="grid gap-2">
+            {savedLocations.map((loc) => (
+              <button 
+                key={loc.id}
+                onClick={() => { setDestination(loc.address); }}
+                className="w-full text-left bg-white p-5 rounded-3xl border border-transparent hover:border-gray-200 transition-all flex items-center justify-between group shadow-sm"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center group-hover:bg-black group-hover:text-white transition-colors">
+                    <MapPin className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900">{loc.name}</p>
+                    <p className="text-xs text-gray-400 font-medium">{loc.address}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveSavedLocation(loc.id);
+                  }}
+                  className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 px-4">No saved locations yet. Add one to get started!</p>
+        )}
       </div>
+
+      {/* Save Location Modal */}
+      <AnimatePresence>
+        {showSaveLocationModal && (
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowSaveLocationModal(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-sm rounded-3xl p-8 relative z-10 shadow-2xl"
+            >
+              <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                <MapPinPlus className="w-6 h-6" />
+                Save Location
+              </h3>
+              <p className="text-gray-500 mb-6">Save "{destination}" as a favorite location</p>
+              
+              <input 
+                type="text"
+                value={locationNameToSave}
+                onChange={(e) => setLocationNameToSave(e.target.value)}
+                placeholder="e.g., Home, Work, Gym"
+                className="w-full bg-gray-50 rounded-2xl p-4 border-none focus:ring-2 focus:ring-black outline-none mb-6 resize-none"
+              />
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowSaveLocationModal(false)}
+                  className="flex-1 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    if (passengerLocation) {
+                      handleSaveLocation(destination, passengerLocation.lat, passengerLocation.lng);
+                    } else {
+                      handleSaveLocation(destination, 51.5074, -0.1278);
+                    }
+                  }}
+                  disabled={isSavingLocation}
+                  className="flex-1 bg-black text-white py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
+                >
+                  {isSavingLocation ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Save'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
